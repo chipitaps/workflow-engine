@@ -1,0 +1,60 @@
+x-database-url: &database-url postgres://engine:${POSTGRES_PASSWORD:-engine}@db:5432/engine
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: engine
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-engine}
+      POSTGRES_DB: engine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U engine -d engine"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: tools
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: *database-url
+      WORKFLOWS_DIR: ${WORKFLOWS_DIR-/app/workflows/examples}
+      DEMO_BASE_URL: http://app:3000
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: *database-url
+    ports:
+      - "${PORT:-3000}:3000"
+
+  worker:
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: *database-url
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      HTTP_ALLOW_HOSTS: app
+    stop_grace_period: 30s
+
+volumes:
+  pgdata:

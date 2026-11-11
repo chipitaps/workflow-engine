@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: engine_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:test@localhost:5432/engine_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run build
+      - run: npm run build:worker
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --build --wait --scale worker=2
+      - name: Trigger the seeded webhook workflow and wait for it to finish
+        run: |
+          token=$(docker compose exec -T db psql -U engine -d engine -Atc "select webhook_token from workflows where slug = 'welcome-signups'")
+          run=$(curl --fail --silent -X POST "http://localhost:3000/api/hooks/$token" \
+            -H 'content-type: application/json' \
+            -d '{"name": "Ada", "email": "ada@example.com", "plan": "pro"}' | jq -r .runId)
+          for attempt in $(seq 1 30); do
+            status=$(curl --fail --silent "http://localhost:3000/api/runs/$run" | jq -r .status)
+            echo "attempt $attempt: $status"
+            if [ "$status" = "succeeded" ]; then break; fi
+            sleep 1
+          done
+          curl --fail --silent "http://localhost:3000/api/runs/$run" | tee run.json | jq .
+          test "$(jq -r .status run.json)" = "succeeded"
+          test "$(jq -r '.steps[-1].output.body.received.message' run.json)" = "Welcome, Ada!"
+      - name: Show worker logs
+        if: always()
+        run: docker compose logs worker migrate
+      - run: docker compose down -v

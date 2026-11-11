@@ -1,0 +1,21 @@
+{
+  "slug": "unreliable-api",
+  "name": "Call an unreliable API",
+  "trigger": { "type": "manual" },
+  "steps": [
+    {
+      "id": "unstable_api",
+      "type": "http",
+      "method": "GET",
+      "url": "${DEMO_BASE_URL}/api/demo/flaky"
+    },
+    {
+      "id": "summary",
+      "type": "transform",
+      "values": {
+        "served_by": "{{steps.unstable_api.body.message}}",
+        "status": "{{steps.unstable_api.status}}"
+      }
+    }
+  ]
+}

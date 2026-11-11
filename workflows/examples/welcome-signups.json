@@ -1,0 +1,31 @@
+{
+  "slug": "welcome-signups",
+  "name": "Welcome new signups",
+  "trigger": { "type": "webhook" },
+  "steps": [
+    {
+      "id": "valid_email",
+      "type": "filter",
+      "left": "{{trigger.body.email}}",
+      "operator": "contains",
+      "right": "@"
+    },
+    {
+      "id": "welcome",
+      "type": "transform",
+      "values": {
+        "message": "Welcome, {{trigger.body.name}}!",
+        "to": "{{trigger.body.email}}",
+        "plan": "{{trigger.body.plan}}"
+      }
+    },
+    { "id": "cool_off", "type": "delay", "seconds": 5 },
+    {
+      "id": "notify",
+      "type": "http",
+      "method": "POST",
+      "url": "${DEMO_BASE_URL}/api/demo/echo",
+      "body": "{{steps.welcome}}"
+    }
+  ]
+}

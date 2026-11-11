@@ -1,0 +1,36 @@
+{
+  "slug": "star-report",
+  "name": "Repository star report",
+  "trigger": { "type": "schedule", "everyMinutes": 30 },
+  "steps": [
+    {
+      "id": "repo",
+      "type": "http",
+      "method": "GET",
+      "url": "https://api.github.com/repos/vercel/next.js",
+      "headers": { "accept": "application/vnd.github+json" }
+    },
+    {
+      "id": "numbers",
+      "type": "transform",
+      "values": {
+        "stars": "{{steps.repo.body.stargazers_count}}",
+        "open_issues": "{{steps.repo.body.open_issues_count}}"
+      }
+    },
+    {
+      "id": "popular",
+      "type": "filter",
+      "left": "{{steps.numbers.stars}}",
+      "operator": "greater_than",
+      "right": "100000"
+    },
+    {
+      "id": "report",
+      "type": "http",
+      "method": "POST",
+      "url": "${DEMO_BASE_URL}/api/demo/echo",
+      "body": "{\"text\": \"next.js has {{steps.numbers.stars}} stars and {{steps.numbers.open_issues}} open issues\"}"
+    }
+  ]
+}
